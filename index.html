@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - Perfect Flow & Memory Tracker</title>
+    <title>SignAI Web - 1Perfect Flow & Memory Tracker</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -176,12 +176,15 @@
                 let fingers_spread = dist_index_middle > 0.05;
                 let fingers_together = dist_index_middle <= 0.05;
 
-                // Απόσταση αντίχειρα-δείκτη (Διαχωρίζει τα "κυκλάκια" / ενωμένες άκρες)
+                // ΑΙΣΘΗΤΗΡΑΣ ΟΝΟΜΑΤΟΣ (ΒΗΜΑ 2): Κυκλάκια
                 let thumb_index_dist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
-                let is_circle = thumb_index_dist < 0.06;
+                let is_circle = thumb_index_dist < 0.08;
 
-                // Δείξιμο ευθεία στην κάμερα (Βάθος Z)
-                let pointing_forward = (idx && lm[8].z < -0.05);
+                // ΑΙΣΘΗΤΗΡΑΣ ΟΝΟΜΑΤΟΣ (ΒΗΜΑ 1): Δείξιμο ευθεία (Έκανα το Z πιο εύκολο να το πιάσει)
+                let pointing_forward = (idx && lm[8].z < -0.02);
+
+                // ΑΙΣΘΗΤΗΡΑΣ ΜΕΣΗΜΕΡΙΟΥ: Ελέγχει αν το χέρι είναι πιο πλατύ (Χ) απ' ό,τι ψηλό (Υ)
+                let is_horizontal = Math.abs(lm[9].x - lm[0].x) > Math.abs(lm[9].y - lm[0].y);
 
                 // --- 1. ΚΑΤΑΓΡΑΦΗ ΜΝΗΜΗΣ ΣΤΑΔΙΩΝ (ΤRANSITIONS) ---
                 if (pointing_forward) {
@@ -192,26 +195,26 @@
                     step_efcharisto_1_time = currentTimeSec;
                 }
 
-                // --- 2. ΑΠΟΛΥΤΗ ΙΕΡΑΡΧΙΑ ΚΑΝΟΝΩΝ (Βάσει φωτογραφιών) ---
+                // --- 2. ΑΠΟΛΥΤΗ ΙΕΡΑΡΧΙΑ ΚΑΝΟΝΩΝ ---
 
                 // ΟΝΟΜΑ: Είδαμε δείξιμο τα τελευταία 3 δευτερόλεπτα ΚΑΙ τώρα βλέπουμε κυκλάκια
                 if (is_circle && (currentTimeSec - step_onoma_1_time < 3.0)) {
                     active_now = "ποιο είναι το όνομά σου";
                 }
-                // ΕΥΧΑΡΙΣΤΩ: Είτε κάνουμε το Στάδιο 1 (Στήθος), είτε το Στάδιο 2 (Ενωμένα) αμέσως μετά
+                // ΕΥΧΑΡΙΣΤΩ: Αμετάβλητο
                 else if ((palm && fingers_together && h_chest) || (is_circle && (currentTimeSec - step_efcharisto_1_time < 3.0))) {
                     active_now = "ευχαριστώ";
                 }
-                // ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Αποκλειστικά κλειστή παλάμη ψηλά στο πηγούνι/πρόσωπο
-                else if (palm && fingers_together && h_chin) {
+                // ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Οριζόντιο χέρι ψηλά στο πρόσωπο/πηγούνι
+                else if (palm && is_horizontal && y_wrist < 0.65) {
                     active_now = "καλό μεσημέρι";
                 }
-                // ΓΕΙΑ: Παλάμη με ανοιχτά/απλωμένα δάχτυλα
+                // ΓΕΙΑ: Αμετάβλητο
                 else if (palm && fingers_spread) {
                     active_now = "γεια";
                 }
-                // ΚΑΛΗΜΕΡΑ: Δείκτης ψηλά, και ΟΧΙ προς την κάμερα (για να μην μπερδευτεί)
-                else if (idx && !pointing_forward && h_high) {
+                // ΚΑΛΗΜΕΡΑ: Αμετάβλητο μεν, αλλά ΜΠΛΟΚΑΡΕΤΑΙ αν δείχνουμε στην κάμερα (ώστε να μην κλέβει το Όνομα)
+                else if (idx && !pointing_forward && (currentTimeSec - step_onoma_1_time > 1.5) && h_high) {
                     active_now = "καλημέρα";
                 }
             }
