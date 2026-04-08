@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - 2Στατικό Μεσημέρι & Κλειδωμένη Βάση (High Sensitivity)</title>
+    <title>SignAI Web - 0Στατικό Μεσημέρι & Κλειδωμένη Βάση (High Sensitivity)</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -183,8 +183,8 @@
 
             // --- ΙΕΡΑΡΧΙΑ ΚΑΝΟΝΩΝ ---
             
-            // 1. ΚΑΛΟ ΜΕΣΗΜΕΡΙ: [ΔΙΟΡΘΩΣΗ 4] Αυξήσαμε το y_index_tip < 0.55 (από 0.45) για ευκολία
-            if (h_cnt === 1 && y_index_tip < 0.55 && y_wrist > y_index_tip && palm && !moutza) {
+            // 1. ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Αποκλειστικά όταν η παλάμη είναι στο πρόσωπο/πηγούνι (y_wrist < 0.50)
+            if (y_wrist < 0.50 && palm && !moutza) {
                 active_now = "καλό μεσημέρι";
             } 
             // 2. ΕΥΧΑΡΙΣΤΩ: Αμετάβλητο
