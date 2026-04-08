@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - 0Στατικό Μεσημέρι & Κλειδωμένη Βάση (High Sensitivity)</title>
+    <title>SignAI Web - Στατικό Μεσημέρι & Κλειδωμένη Βάση (High Sensitivity)</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -139,7 +139,6 @@
             let active_now = null;
             let h_cnt = 0;
             
-            // 100% ΠΙΣΤΗ ΑΝΤΙΓΡΑΦΗ ΑΠΟ ΤΟ PYTHON SCRIPT ΓΙΑ ΤΑ ΠΑΛΙΑ
             let palm = false, idx = false, moutza = false;
             let h_chin = false, h_high = false, h_chest = false;
             let y_index_tip = 1.0;
@@ -154,7 +153,6 @@
 
                     y_wrist = lm[0].y;
                     
-                    // [ΔΙΟΡΘΩΣΗ 1] Το κάναμε 0.75 (από 0.65) για να πιάνει πιο εύκολα την "Καλημέρα" (h_high)
                     if (y_wrist < 0.40) h_chin = true;
                     else if (y_wrist < 0.75) h_high = true; 
                     else h_chest = true;
@@ -166,42 +164,43 @@
                     if (lm[20].y < lm[18].y) up++;
 
                     if (up >= 3) palm = true;
-                    // [ΔΙΟΡΘΩΣΗ 2] Βεβαιωνόμαστε ότι το "1 δάχτυλο" είναι όντως ο δείκτης (lm[8])
                     else if (up === 1 && lm[8].y < lm[6].y) idx = true; 
+
+                    // ΝΕΟ: Αναγνώριση για 2 δάχτυλα (Δείκτης και Μεσαίος όρθια) για το "Όνομα"
+                    let two_fingers = (up === 2 && lm[8].y < lm[6].y && lm[12].y < lm[10].y);
 
                     let dist_thumb_pinky = Math.hypot(lm[4].x - lm[20].x, lm[4].y - lm[20].y);
                     let dist_index_middle = Math.hypot(lm[8].x - lm[12].x, lm[8].y - lm[12].y);
                     
                     y_index_tip = lm[8].y;
 
-                    // [ΔΙΟΡΘΩΣΗ 3] Κατεβάσαμε τις απαιτήσεις απόστασης (από 0.15 σε 0.10) για να πιάνει το "Γεια" πολύ πιο εύκολα
                     if (palm && dist_thumb_pinky > 0.10 && dist_index_middle > 0.02) { 
                         moutza = true;
                     }
-                }
-            }
 
-            // --- ΙΕΡΑΡΧΙΑ ΚΑΝΟΝΩΝ ---
-            
-            // 1. ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Αποκλειστικά όταν η παλάμη είναι στο πρόσωπο/πηγούνι (y_wrist < 0.50)
-            if (y_wrist < 0.50 && palm && !moutza) {
-                active_now = "καλό μεσημέρι";
-            } 
-            // 2. ΕΥΧΑΡΙΣΤΩ: Αμετάβλητο
-            else if (h_chest && palm && !moutza) {
-                active_now = "ευχαριστώ";
-            } 
-            // 3. ΓΕΙΑ: Αμετάβλητο
-            else if (moutza) {
-                active_now = "γεια";
-            } 
-            // 4. ΚΑΛΗΜΕΡΑ: Αμετάβλητο
-            else if (idx && h_high) {
-                active_now = "καλημέρα";
-            } 
-            // 5. ΟΝΟΜΑ: Αμετάβλητο
-            else if (idx && h_chest) {
-                active_now = "ποιο είναι το όνομά σου";
+                    // --- ΙΕΡΑΡΧΙΑ ΚΑΝΟΝΩΝ ---
+                    
+                    // 1. ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Παλάμη αποκλειστικά στο πρόσωπο/πηγούνι (δείκτης < 0.45 ή καρπός ψηλά)
+                    if ((h_chin || y_index_tip < 0.45) && palm && !moutza) {
+                        active_now = "καλό μεσημέρι";
+                    } 
+                    // 2. ΕΥΧΑΡΙΣΤΩ: Αμετάβλητο
+                    else if (h_chest && palm && !moutza) {
+                        active_now = "ευχαριστώ";
+                    } 
+                    // 3. ΓΕΙΑ: Αμετάβλητο
+                    else if (moutza) {
+                        active_now = "γεια";
+                    } 
+                    // 4. ΚΑΛΗΜΕΡΑ: Αμετάβλητο
+                    else if (idx && h_high) {
+                        active_now = "καλημέρα";
+                    } 
+                    // 5. ΟΝΟΜΑ: Είτε 1 είτε 2 δάχτυλα (δείκτης+μεσαίος) στο ύψος του στήθους
+                    else if ((idx || two_fingers) && h_chest) {
+                        active_now = "ποιο είναι το όνομά σου";
+                    }
+                }
             }
 
             // --- ΣΥΣΤΗΜΑ RECORDING ---
@@ -224,7 +223,6 @@
             }
 
             if (recording) {
-                // [ΔΙΟΡΘΩΣΗ 5] Μειώσαμε το χρόνο από 1.4 σε 0.8 για ακαριαία απόκριση (ταχύτητα)
                 if ((currentTime - recording_started_at) >= 0.8) {
                     if (word_candidates.length > 0) {
                         let counts = {};
