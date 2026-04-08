@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - Στατικό Μεσημέρι & Κλειδωμένη Βάση (High Sensitivity)</title>
+    <title>SignAI Web - 3Στατικό Μεσημέρι & Κλειδωμένη Βάση (High Sensitivity)</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -144,6 +144,11 @@
             let y_index_tip = 1.0;
             let y_wrist = 1.0; 
 
+            // Νέοι αισθητήρες
+            let is_horizontal = false;
+            let is_circle = false;
+            let pointing_forward = false;
+
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 h_cnt = results.multiHandLandmarks.length;
 
@@ -152,6 +157,7 @@
                     drawLandmarks(canvasCtx, lm, {color: '#FF0000', lineWidth: 2});
 
                     y_wrist = lm[0].y;
+                    y_index_tip = lm[8].y;
                     
                     if (y_wrist < 0.40) h_chin = true;
                     else if (y_wrist < 0.75) h_high = true; 
@@ -166,42 +172,52 @@
                     if (up >= 3) palm = true;
                     else if (up === 1 && lm[8].y < lm[6].y) idx = true; 
 
-                    // ΝΕΟ: Αναγνώριση για 2 δάχτυλα (Δείκτης και Μεσαίος όρθια) για το "Όνομα"
-                    let two_fingers = (up === 2 && lm[8].y < lm[6].y && lm[12].y < lm[10].y);
-
                     let dist_thumb_pinky = Math.hypot(lm[4].x - lm[20].x, lm[4].y - lm[20].y);
                     let dist_index_middle = Math.hypot(lm[8].x - lm[12].x, lm[8].y - lm[12].y);
                     
-                    y_index_tip = lm[8].y;
-
                     if (palm && dist_thumb_pinky > 0.10 && dist_index_middle > 0.02) { 
                         moutza = true;
                     }
 
-                    // --- ΙΕΡΑΡΧΙΑ ΚΑΝΟΝΩΝ ---
-                    
-                    // 1. ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Παλάμη αποκλειστικά στο πρόσωπο/πηγούνι (δείκτης < 0.45 ή καρπός ψηλά)
-                    if ((h_chin || y_index_tip < 0.45) && palm && !moutza) {
-                        active_now = "καλό μεσημέρι";
-                    } 
-                    // 2. ΕΥΧΑΡΙΣΤΩ: Αμετάβλητο
-                    else if (h_chest && palm && !moutza) {
-                        active_now = "ευχαριστώ";
-                    } 
-                    // 3. ΓΕΙΑ: Αμετάβλητο
-                    else if (moutza) {
-                        active_now = "γεια";
-                    } 
-                    // 4. ΚΑΛΗΜΕΡΑ: Αμετάβλητο
-                    else if (idx && h_high) {
-                        active_now = "καλημέρα";
-                    } 
-                    // 5. ΟΝΟΜΑ: Είτε 1 είτε 2 δάχτυλα (δείκτης+μεσαίος) στο ύψος του στήθους
-                    else if ((idx || two_fingers) && h_chest) {
-                        active_now = "ποιο είναι το όνομά σου";
+                    // ΑΙΣΘΗΤΗΡΑΣ 1: Ορθή γωνία (το χέρι είναι οριζόντιο, δείκτης και καρπός στο ίδιο ύψος περίπου)
+                    if (Math.abs(lm[8].y - lm[0].y) < 0.20 && Math.abs(lm[8].x - lm[0].x) > 0.10) {
+                        is_horizontal = true;
+                    }
+
+                    // ΑΙΣΘΗΤΗΡΑΣ 2: Κυκλάκια (Αντίχειρας και δείκτης ενώνονται/είναι πολύ κοντά)
+                    if (Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y) < 0.08) {
+                        is_circle = true;
+                    }
+
+                    // ΑΙΣΘΗΤΗΡΑΣ 3: Δείχνει στην κάμερα (Η συντεταγμένη Ζ του δείκτη μπαίνει "μέσα" στην οθόνη)
+                    if (lm[8].z < -0.05) {
+                        pointing_forward = true;
                     }
                 }
             }
+
+            // --- ΙΕΡΑΡΧΙΑ ΚΑΝΟΝΩΝ ---
+            
+            // 1. ΟΝΟΜΑ: Δείχνει στην κάμερα Ή κάνει κυκλάκια με τα δάχτυλα
+            if (is_circle || (idx && pointing_forward)) {
+                active_now = "ποιο είναι το όνομά σου";
+            }
+            // 2. ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Ορθή γωνία (οριζόντιο) στο ύψος του πηγουνιού (y_wrist < 0.50)
+            else if (y_wrist < 0.50 && is_horizontal && palm && !moutza) {
+                active_now = "καλό μεσημέρι";
+            } 
+            // 3. ΕΥΧΑΡΙΣΤΩ: Αμετάβλητο
+            else if (h_chest && palm && !moutza) {
+                active_now = "ευχαριστώ";
+            } 
+            // 4. ΓΕΙΑ: Αμετάβλητο
+            else if (moutza) {
+                active_now = "γεια";
+            } 
+            // 5. ΚΑΛΗΜΕΡΑ: Αμετάβλητο (πρόσθεσα έλεγχο για να μην μπερδεύεται με το όνομα)
+            else if (idx && h_high && !pointing_forward && !is_circle) {
+                active_now = "καλημέρα";
+            } 
 
             // --- ΣΥΣΤΗΜΑ RECORDING ---
             let currentTime = performance.now() / 1000;
