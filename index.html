@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - Στατικό Μεσημέρι & Κλειδωμένη Βάση</title>
+    <title>SignAI Web - 1Στατικό Μεσημέρι & Βελτιωμένη Ευαισθησία</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -112,11 +112,13 @@
             return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
         }});
 
+        // Αύξησα την πολυπλοκότητα στο 1 (ήταν 1 και πριν) αλλά μείωσα το tracking 
+        // για να μην χάνει το χέρι αν κουνηθείς γρήγορα.
         hands.setOptions({
             maxNumHands: 2,
             modelComplexity: 1,
-            minDetectionConfidence: 0.7,
-            minTrackingConfidence: 0.7
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.6
         });
 
         hands.onResults(onResults);
@@ -139,66 +141,65 @@
             let active_now = null;
             let h_cnt = 0;
             
-            // 100% ΠΙΣΤΗ ΑΝΤΙΓΡΑΦΗ ΑΠΟ ΤΟ PYTHON SCRIPT ΓΙΑ ΤΑ ΠΑΛΙΑ
             let palm = false, idx = false, moutza = false;
-            let h_chin = false, h_high = false, h_chest = false;
             let y_index_tip = 1.0;
             let y_wrist = 1.0; 
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 h_cnt = results.multiHandLandmarks.length;
 
-                for (const lm of results.multiHandLandmarks) {
-                    drawConnectors(canvasCtx, lm, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
-                    drawLandmarks(canvasCtx, lm, {color: '#FF0000', lineWidth: 2});
+                // Αναλύουμε μόνο το πρώτο χέρι που βλέπει (για να μην μπερδεύεται αν δει δύο)
+                const lm = results.multiHandLandmarks[0];
+                
+                drawConnectors(canvasCtx, lm, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
+                drawLandmarks(canvasCtx, lm, {color: '#FF0000', lineWidth: 2});
 
-                    y_wrist = lm[0].y;
-                    
-                    if (y_wrist < 0.40) h_chin = true;
-                    else if (y_wrist < 0.65) h_high = true;
-                    else h_chest = true;
+                y_wrist = lm[0].y;
+                y_index_tip = lm[8].y;
 
-                    let up = 0;
-                    if (lm[8].y < lm[6].y) up++;
-                    if (lm[12].y < lm[10].y) up++;
-                    if (lm[16].y < lm[14].y) up++;
-                    if (lm[20].y < lm[18].y) up++;
+                let up = 0;
+                if (lm[8].y < lm[6].y) up++;
+                if (lm[12].y < lm[10].y) up++;
+                if (lm[16].y < lm[14].y) up++;
+                if (lm[20].y < lm[18].y) up++;
 
-                    if (up >= 3) palm = true;
-                    else if (up === 1) idx = true;
+                if (up >= 3) palm = true;
+                else if (up === 1 && lm[8].y < lm[6].y) idx = true; // Αυστηρός έλεγχος για δείκτη
 
-                    let dist_thumb_pinky = Math.hypot(lm[4].x - lm[20].x, lm[4].y - lm[20].y);
-                    let dist_index_middle = Math.hypot(lm[8].x - lm[12].x, lm[8].y - lm[12].y);
-                    
-                    y_index_tip = lm[8].y;
+                let dist_thumb_pinky = Math.hypot(lm[4].x - lm[20].x, lm[4].y - lm[20].y);
+                let dist_index_middle = Math.hypot(lm[8].x - lm[12].x, lm[8].y - lm[12].y);
+                
+                if (palm && dist_thumb_pinky > 0.15 && dist_index_middle > 0.03) {
+                    moutza = true;
+                }
 
-                    if (palm && dist_thumb_pinky > 0.15 && dist_index_middle > 0.03) {
-                        moutza = true;
+                // --- ΒΕΛΤΙΩΜΕΝΗ ΙΕΡΑΡΧΙΑ ΚΑΝΟΝΩΝ ---
+                // Οι κανόνες τώρα βασίζονται κυρίως στη χειρονομία και μετά στο ύψος
+                
+                if (h_cnt === 1) {
+                    if (moutza) {
+                        active_now = "γεια";
+                    } 
+                    else if (palm && !moutza) {
+                        // Αν είναι παλάμη αλλά όχι μούτζα.
+                        // Ελέγχουμε αν είναι "Καλό Μεσημέρι" (ο καρπός ψηλότερα από τον δείκτη - χέρι οριζόντια)
+                        if (y_index_tip < 0.50 && y_wrist > y_index_tip) {
+                            active_now = "καλό μεσημέρι";
+                        } 
+                        // Αλλιώς είναι "Ευχαριστώ" (παλάμη μπροστά στο σώμα/πρόσωπο)
+                        else {
+                            active_now = "ευχαριστώ";
+                        }
+                    } 
+                    else if (idx) {
+                        // Αν είναι μόνο ο δείκτης ψηλά. Ελέγχουμε το ύψος του καρπού
+                        if (y_wrist < 0.60) { // Αν ο καρπός είναι ψηλά (κοντά στο πρόσωπο)
+                            active_now = "καλημέρα";
+                        } else { // Αν ο καρπός είναι χαμηλά (στήθος/κοιλιά)
+                            active_now = "ποιο είναι το όνομά σου";
+                        }
                     }
                 }
-            }
-
-            // --- ΙΕΡΑΡΧΙΑ ΚΑΝΟΝΩΝ ---
-            
-            // 1. ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Αμετάβλητο
-            if (h_cnt === 1 && y_index_tip < 0.45 && y_wrist > y_index_tip && palm && !moutza) {
-                active_now = "καλό μεσημέρι";
-            } 
-            // 2. ΕΥΧΑΡΙΣΤΩ: Νέος κανόνας με τα δικά σου λόγια (Στήθος, παλάμη, σχετικά κλειστά δάχτυλα)
-            else if (h_chest && palm && !moutza) {
-                active_now = "ευχαριστώ";
-            } 
-            // 3. ΓΕΙΑ: Αμετάβλητο (Ανοιχτά δάχτυλα/μούτζα)
-            else if (moutza) {
-                active_now = "γεια";
-            } 
-            // 4. ΚΑΛΗΜΕΡΑ: Αμετάβλητο
-            else if (idx && h_high) {
-                active_now = "καλημέρα";
-            } 
-            // 5. ΟΝΟΜΑ: Αμετάβλητο
-            else if (idx && h_chest) {
-                active_now = "ποιο είναι το όνομά σου";
             }
 
             // --- ΣΥΣΤΗΜΑ RECORDING ---
@@ -221,7 +222,9 @@
             }
 
             if (recording) {
-                if ((currentTime - recording_started_at) >= 1.4) {
+                // Μείωσα τον χρόνο καταγραφής στο 1.0 δευτερόλεπτο για να νιώθεις
+                // ότι αντιδρά πιο γρήγορα (ήταν 1.4).
+                if ((currentTime - recording_started_at) >= 1.0) {
                     if (word_candidates.length > 0) {
                         let counts = {};
                         let maxWord = word_candidates[0];
