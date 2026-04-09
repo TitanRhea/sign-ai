@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - Photographic Sensors v2</title>
+    <title>SignAI Web - Dynamic Motion & Voice Control</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -66,18 +66,29 @@
             display: none;
             margin-bottom: 20px;
         }
+        #voice-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(33, 150, 243, 0.8);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+        }
         h1 { margin-top: 0; color: #4CAF50; }
     </style>
 </head>
 <body>
 
     <h1>🚀 SignAI Web: Αμφίδρομη Επικοινωνία</h1>
-    <p>Δείξε μια χειρονομία στην κάμερα. Το σύστημα θα μιλήσει στα Ελληνικά!</p>
+    <p>Δείξε μια χειρονομία στην κάμερα. Πάτα το <b>1</b> για Άντρα και το <b>2</b> για Γυναίκα.</p>
 
     <div class="container">
         <video id="video_element" width="640" height="480" autoplay></video>
         <canvas id="canvas_element" width="640" height="480"></canvas>
         <div id="ui-layer">
+            <div id="voice-indicator">Φωνή: Γυναίκα (Προεπιλογή)</div>
             <div id="reading-box">READING: <span id="current-scan">...</span></div>
             <div id="final-word"></div>
         </div>
@@ -90,26 +101,69 @@
         const readingBox = document.getElementById('reading-box');
         const currentScanText = document.getElementById('current-scan');
         const finalWordBox = document.getElementById('final-word');
+        const voiceIndicator = document.getElementById('voice-indicator');
 
-        // --- ΜΕΤΑΒΛΗΤΕΣ ΛΟΓΙΚΗΣ & ΜΝΗΜΗΣ ---
-        let recording = false;
-        let recording_started_at = 0;
-        let word_candidates = [];
-        let word_queue = [];
-        let current_word = null;
+        // --- ΕΠΙΛΟΓΗ ΦΩΝΗΣ (ΠΛΗΚΤΡΑ 1 & 2) ---
+        let preferredGender = 'female'; 
+        
+        window.addEventListener('keydown', (e) => {
+            if (e.key === '1') {
+                preferredGender = 'male';
+                voiceIndicator.innerText = "Φωνή: Άντρας";
+                console.log("Επιλέχθηκε Αντρική Φωνή");
+            } else if (e.key === '2') {
+                preferredGender = 'female';
+                voiceIndicator.innerText = "Φωνή: Γυναίκα";
+                console.log("Επιλέχθηκε Γυναικεία Φωνή");
+            }
+        });
 
-        // Μνήμη για τις κινήσεις 2 σταδίων
-        let step_onoma_1_time = 0;
-        let step_efcharisto_1_time = 0;
-
-        // --- ΣΥΣΤΗΜΑ ΗΧΟΥ (Web Speech API) ---
         function speakGreek(text) {
             window.speechSynthesis.cancel();
             let utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'el-GR';
             utterance.rate = 1.0;
+
+            let voices = window.speechSynthesis.getVoices().filter(v => v.lang.includes('el'));
+            if (voices.length > 0) {
+                let selectedVoice = voices[0]; // Προεπιλογή η πρώτη διαθέσιμη
+                
+                // Προσπάθεια εύρεσης συγκεκριμένου φύλου βάσει ονόματος (π.χ. Windows TTS)
+                for (let v of voices) {
+                    let name = v.name.toLowerCase();
+                    if (preferredGender === 'male' && (name.includes('stefanos') || name.includes('male'))) {
+                        selectedVoice = v;
+                        break;
+                    } else if (preferredGender === 'female' && (name.includes('zira') || name.includes('female'))) {
+                        selectedVoice = v;
+                        break;
+                    }
+                }
+                // Αν δεν βρει ονομαστικά, και έχουμε πάνω από 1 φωνή, χρησιμοποιεί εναλλακτική
+                if (preferredGender === 'male' && voices.length > 1 && !selectedVoice.name.toLowerCase().includes('stefanos')) {
+                    selectedVoice = voices[1]; // Συνήθως η 2η είναι η αντρική αν υπάρχει
+                }
+                utterance.voice = selectedVoice;
+            }
+            
             window.speechSynthesis.speak(utterance);
         }
+
+        // Φόρτωση φωνών από τον browser
+        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
+
+        // --- ΜΕΤΑΒΛΗΤΕΣ ΛΟΓΙΚΗΣ & ΜΝΗΜΗΣ ---
+        let recording = false;
+        let recording_started_at = 0;
+        let word_candidates = [];
+        
+        // Η ΝΕΑ ΜΝΗΜΗ ΚΙΝΗΣΗΣ (QUEUE)
+        const frameHistory = [];
+        const HISTORY_LENGTH = 15; 
+
+        // Μνήμη για τις κινήσεις 2 σταδίων
+        let step_onoma_1_time = 0;
+        let step_efcharisto_1_time = 0;
 
         // --- ΡΥΘΜΙΣΗ MEDIAPIPE ---
         const hands = new Hands({locateFile: (file) => {
@@ -143,18 +197,35 @@
             let active_now = null;
             let currentTimeSec = performance.now() / 1000;
 
-            // Θα κοιτάμε ΚΑΙ τα δύο χέρια αν υπάρχουν, αλλά η λογική τρέχει στο [0]
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const lm = results.multiHandLandmarks[0];
                 
                 drawConnectors(canvasCtx, lm, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
                 drawLandmarks(canvasCtx, lm, {color: '#FF0000', lineWidth: 2});
 
-                // ΥΨΟΜΕΤΡΙΚΕΣ ΖΩΝΕΣ
-                let y_wrist = lm[0].y;
-                let hand_is_up = y_wrist < 0.70; // Αποκλείει όταν τα χέρια κρέμονται κάτω σε ανάπαυση
+                // Αποθήκευση στο Queue (Μνήμη Κίνησης)
+                frameHistory.push(lm[0]); // Αποθηκεύουμε τη θέση του καρπού
+                if (frameHistory.length > HISTORY_LENGTH) {
+                    frameHistory.shift();
+                }
 
-                // ΚΑΤΑΣΤΑΣΗ ΔΑΧΤΥΛΩΝ
+                // Υπολογισμός Κίνησης στα τελευταία 15 καρέ
+                let movement_x = 0;
+                let movement_y = 0;
+                if (frameHistory.length === HISTORY_LENGTH) {
+                    let xs = frameHistory.map(p => p.x);
+                    let ys = frameHistory.map(p => p.y);
+                    movement_x = Math.max(...xs) - Math.min(...xs);
+                    movement_y = Math.max(...ys) - Math.min(...ys);
+                }
+
+                // Υψομετρικές ζώνες
+                let y_wrist = lm[0].y;
+                let hand_is_up = y_wrist < 0.70; 
+                let h_chin = y_wrist < 0.45;  
+                let h_chest = y_wrist >= 0.45; 
+
+                // Κατάσταση δαχτύλων
                 let is_index_up = lm[8].y < lm[6].y;
                 let is_middle_up = lm[12].y < lm[10].y;
                 let is_ring_up = lm[16].y < lm[14].y;
@@ -167,66 +238,71 @@
                 if(is_pinky_up) up_count++;
 
                 let palm = (up_count >= 3);
+                let idx = (up_count === 1 && is_index_up);
 
-                // --- ΝΕΟΙ ΑΙΣΘΗΤΗΡΕΣ (Ραμμένοι στο βίντεο) ---
-
-                // 1. ΑΠΟΣΤΑΣΗ ΔΑΧΤΥΛΩΝ (Για το Γεια - ανοιχτή παλάμη)
+                // ΑΙΣΘΗΤΗΡΕΣ (Συνδυασμός Στάσης + Κίνησης)
+                
+                // 1. ΓΕΙΑ: Ανοιχτή παλάμη ΚΑΙ κίνηση δεξιά-αριστερά (X axis)
                 let dist_index_pinky = Math.hypot(lm[8].x - lm[20].x, lm[8].y - lm[20].y);
                 let fingers_spread = dist_index_pinky > 0.15 && palm;
-                let fingers_together = dist_index_pinky <= 0.12 && palm;
+                let is_waving = fingers_spread && hand_is_up && (movement_x > 0.05);
 
-                // 2. ΚΥΚΛΑΚΙ (Για Καλημέρα & Όνομα Βήμα 2) - Ο Αντίχειρας ακουμπάει τον Δείκτη
+                // 2. ΚΑΛΗΜΕΡΑ: Δείκτης όρθιος ΚΑΙ το χέρι κατεβαίνει (Y axis movement)
+                let is_greeting_down = idx && hand_is_up && (movement_y > 0.05);
+
+                // 3. ΟΝΟΜΑ (ΒΗΜΑ 2): Κυκλάκι σταθερό
                 let thumb_index_dist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
                 let is_circle = thumb_index_dist < 0.06;
 
-                // 3. ΠΟΥΓΚΙ (Για Ευχαριστώ Βήμα 2) - Ο Αντίχειρας ακουμπάει τον Δείκτη ΚΑΙ τον Μεσαίο
+                // 4. ΕΥΧΑΡΙΣΤΩ (ΒΗΜΑ 2): Πουγκί
                 let thumb_middle_dist = Math.hypot(lm[4].x - lm[12].x, lm[4].y - lm[12].y);
                 let tips_gathered = thumb_index_dist < 0.08 && thumb_middle_dist < 0.08 && !palm;
 
-                // 4. ΔΕΙΞΙΜΟ ΣΤΗΝ ΚΑΜΕΡΑ (Για Όνομα Βήμα 1) - Η άκρη του δείκτη πέφτει πάνω στη βάση του (foreshortening) + βάθος Z
+                // 5. ΟΝΟΜΑ (ΒΗΜΑ 1): Δείξιμο κάμερα
                 let foreshortened_index = Math.hypot(lm[8].x - lm[5].x, lm[8].y - lm[5].y) < 0.08;
                 let pointing_camera = foreshortened_index && lm[8].z < -0.04;
 
-                // 5. ΟΡΙΖΟΝΤΙΟ ΧΕΡΙ (Για Καλό Μεσημέρι) - Το χέρι είναι πιο πλατύ απ' ότι ψηλό
+                // 6. ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Οριζόντιο χέρι σταθερό
                 let is_horizontal = Math.abs(lm[9].x - lm[0].x) > Math.abs(lm[9].y - lm[0].y) * 1.2;
 
-                // --- 1. ΚΑΤΑΓΡΑΦΗ ΜΝΗΜΗΣ ΣΤΑΔΙΩΝ (Αυξήθηκε ο χρόνος στα 5 δευτερόλεπτα) ---
+                // --- 1. ΚΑΤΑΓΡΑΦΗ ΜΝΗΜΗΣ ΣΤΑΔΙΩΝ (5 δευτερόλεπτα) ---
                 if (pointing_camera) {
                     step_onoma_1_time = currentTimeSec;
                 }
                 
-                if (palm && fingers_together && hand_is_up) {
+                let fingers_together = dist_index_pinky <= 0.12 && palm;
+                if (palm && fingers_together && h_chest) {
                     step_efcharisto_1_time = currentTimeSec;
                 }
 
-                // --- 2. ΑΠΟΛΥΤΗ ΙΕΡΑΡΧΙΑ ΚΑΝΟΝΩΝ ---
+                // --- 2. ΙΕΡΑΡΧΙΑ ΔΥΝΑΜΙΚΩΝ ΚΑΝΟΝΩΝ ---
 
-                // ΟΝΟΜΑ: Είδαμε δείξιμο τα τελευταία 5 δευτερόλεπτα ΚΑΙ τώρα βλέπουμε κυκλάκια
                 if (is_circle && (currentTimeSec - step_onoma_1_time < 5.0)) {
                     active_now = "ποιο είναι το όνομά σου";
                 }
-                // ΕΥΧΑΡΙΣΤΩ: Είδαμε το χέρι στο στήθος πρόσφατα ΚΑΙ τώρα έγιναν "πουγκί" τα δάχτυλα
                 else if (tips_gathered && (currentTimeSec - step_efcharisto_1_time < 5.0)) {
                     active_now = "ευχαριστώ";
                 }
-                // ΚΑΛΗΜΕΡΑ: Κυκλάκι με τα χέρια ψηλά (χωρίς να έχει προηγηθεί δείξιμο)
-                else if (is_circle && hand_is_up) {
+                // Η Καλημέρα πλέον απαιτεί κίνηση (να κατεβαίνει το χέρι)
+                else if (is_greeting_down) {
                     active_now = "καλημέρα";
                 }
-                // ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Οριζόντιο χέρι ψηλά
-                else if (palm && is_horizontal && hand_is_up) {
+                // Το Καλό Μεσημέρι απαιτεί σταθερότητα (όχι μεγάλη κίνηση Y)
+                else if (palm && is_horizontal && h_chin && movement_y < 0.08) {
                     active_now = "καλό μεσημέρι";
                 }
-                // ΓΕΙΑ: Ανοιχτά δάχτυλα, ΑΥΣΤΗΡΑ μόνο όταν τα χέρια είναι ψηλά (για να μην πιάνει όταν τα κατεβάζεις)
-                else if (fingers_spread && hand_is_up) {
+                // Το Γεια απαιτεί κίνηση δεξιά-αριστερά (ώστε να μην πιάνει το άνοιγμα των χεριών στο τέλος)
+                else if (is_waving) {
                     active_now = "γεια";
                 }
+            } else {
+                // Καθαρισμός ιστορικού αν χαθεί το χέρι
+                frameHistory.length = 0; 
             }
 
             // --- ΣΥΣΤΗΜΑ RECORDING ---
             if (active_now) {
                 if (!recording) {
-                    console.log(`📡 [SCAN] Εντοπίστηκε: ${active_now}`);
                     recording = true;
                     recording_started_at = currentTimeSec;
                     word_candidates = [active_now];
@@ -255,9 +331,6 @@
                         }
 
                         let final = maxWord;
-                        word_queue.push(final);
-                        
-                        console.log(`✅ [FINAL] Ειπώθηκε: ${final}`);
                         speakGreek(final);
 
                         finalWordBox.innerText = final;
