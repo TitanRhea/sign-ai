@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - Perfect Flow & Photographic Memory</title>
+    <title>SignAI Web - Photographic Sensors v2</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -143,19 +143,18 @@
             let active_now = null;
             let currentTimeSec = performance.now() / 1000;
 
+            // Θα κοιτάμε ΚΑΙ τα δύο χέρια αν υπάρχουν, αλλά η λογική τρέχει στο [0]
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const lm = results.multiHandLandmarks[0];
                 
                 drawConnectors(canvasCtx, lm, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
                 drawLandmarks(canvasCtx, lm, {color: '#FF0000', lineWidth: 2});
 
-                // Υψομετρικές ζώνες (Βελτιωμένες)
+                // ΥΨΟΜΕΤΡΙΚΕΣ ΖΩΝΕΣ
                 let y_wrist = lm[0].y;
-                let h_chin = y_wrist < 0.45;  // Κοντά στο πρόσωπο
-                let h_high = y_wrist < 0.75; 
-                let h_chest = y_wrist >= 0.45; // Στο στήθος
+                let hand_is_up = y_wrist < 0.70; // Αποκλείει όταν τα χέρια κρέμονται κάτω σε ανάπαυση
 
-                // Κατάσταση δαχτύλων
+                // ΚΑΤΑΣΤΑΣΗ ΔΑΧΤΥΛΩΝ
                 let is_index_up = lm[8].y < lm[6].y;
                 let is_middle_up = lm[12].y < lm[10].y;
                 let is_ring_up = lm[16].y < lm[14].y;
@@ -168,58 +167,59 @@
                 if(is_pinky_up) up_count++;
 
                 let palm = (up_count >= 3);
-                let idx = (up_count === 1 && is_index_up);
 
-                // --- ΝΕΟΙ 2D ΑΙΣΘΗΤΗΡΕΣ ΒΑΣΕΙ ΦΩΤΟΓΡΑΦΙΩΝ ---
+                // --- ΝΕΟΙ ΑΙΣΘΗΤΗΡΕΣ (Ραμμένοι στο βίντεο) ---
 
-                // 1. ΓΕΙΑ: Ανοιχτά ή κλειστά δάχτυλα
+                // 1. ΑΠΟΣΤΑΣΗ ΔΑΧΤΥΛΩΝ (Για το Γεια - ανοιχτή παλάμη)
                 let dist_index_pinky = Math.hypot(lm[8].x - lm[20].x, lm[8].y - lm[20].y);
-                let fingers_spread = dist_index_pinky > 0.15;
-                let fingers_together = dist_index_pinky <= 0.12;
+                let fingers_spread = dist_index_pinky > 0.15 && palm;
+                let fingers_together = dist_index_pinky <= 0.12 && palm;
 
-                // 2. ΟΝΟΜΑ (ΒΗΜΑ 1): Δείχνει κάμερα. Τοπικό 2D τρικ: Η άκρη του δείκτη πέφτει πάνω στη βάση του!
-                let pointing_camera = Math.hypot(lm[8].x - lm[5].x, lm[8].y - lm[5].y) < 0.08 && !palm;
+                // 2. ΚΥΚΛΑΚΙ (Για Καλημέρα & Όνομα Βήμα 2) - Ο Αντίχειρας ακουμπάει τον Δείκτη
+                let thumb_index_dist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
+                let is_circle = thumb_index_dist < 0.06;
 
-                // 3. ΟΝΟΜΑ (ΒΗΜΑ 2): Κυκλάκια (μόνο αντίχειρας και δείκτης κοντά)
-                let is_circle = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y) < 0.06 && !palm;
+                // 3. ΠΟΥΓΚΙ (Για Ευχαριστώ Βήμα 2) - Ο Αντίχειρας ακουμπάει τον Δείκτη ΚΑΙ τον Μεσαίο
+                let thumb_middle_dist = Math.hypot(lm[4].x - lm[12].x, lm[4].y - lm[12].y);
+                let tips_gathered = thumb_index_dist < 0.08 && thumb_middle_dist < 0.08 && !palm;
 
-                // 4. ΕΥΧΑΡΙΣΤΩ (ΒΗΜΑ 2): Μαζεμένες άκρες (Δείκτης & Μεσαίος ακουμπάνε Αντίχειρα)
-                let tips_gathered = Math.hypot(lm[8].x - lm[4].x, lm[8].y - lm[4].y) < 0.10 &&
-                                    Math.hypot(lm[12].x - lm[4].x, lm[12].y - lm[4].y) < 0.10;
+                // 4. ΔΕΙΞΙΜΟ ΣΤΗΝ ΚΑΜΕΡΑ (Για Όνομα Βήμα 1) - Η άκρη του δείκτη πέφτει πάνω στη βάση του (foreshortening) + βάθος Z
+                let foreshortened_index = Math.hypot(lm[8].x - lm[5].x, lm[8].y - lm[5].y) < 0.08;
+                let pointing_camera = foreshortened_index && lm[8].z < -0.04;
 
-                // 5. ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Οριζόντιο χέρι (η απόσταση Χ είναι μεγαλύτερη από την απόσταση Υ)
+                // 5. ΟΡΙΖΟΝΤΙΟ ΧΕΡΙ (Για Καλό Μεσημέρι) - Το χέρι είναι πιο πλατύ απ' ότι ψηλό
                 let is_horizontal = Math.abs(lm[9].x - lm[0].x) > Math.abs(lm[9].y - lm[0].y) * 1.2;
 
-                // --- 1. ΚΑΤΑΓΡΑΦΗ ΜΝΗΜΗΣ ΣΤΑΔΙΩΝ (ΤRANSITIONS) ---
+                // --- 1. ΚΑΤΑΓΡΑΦΗ ΜΝΗΜΗΣ ΣΤΑΔΙΩΝ (Αυξήθηκε ο χρόνος στα 5 δευτερόλεπτα) ---
                 if (pointing_camera) {
                     step_onoma_1_time = currentTimeSec;
                 }
                 
-                if (palm && fingers_together && h_chest) {
+                if (palm && fingers_together && hand_is_up) {
                     step_efcharisto_1_time = currentTimeSec;
                 }
 
                 // --- 2. ΑΠΟΛΥΤΗ ΙΕΡΑΡΧΙΑ ΚΑΝΟΝΩΝ ---
 
-                // ΟΝΟΜΑ: Είδαμε δείξιμο τα τελευταία 3 δευτερόλεπτα ΚΑΙ τώρα βλέπουμε κυκλάκια
-                if (is_circle && (currentTimeSec - step_onoma_1_time < 3.0)) {
+                // ΟΝΟΜΑ: Είδαμε δείξιμο τα τελευταία 5 δευτερόλεπτα ΚΑΙ τώρα βλέπουμε κυκλάκια
+                if (is_circle && (currentTimeSec - step_onoma_1_time < 5.0)) {
                     active_now = "ποιο είναι το όνομά σου";
                 }
-                // ΕΥΧΑΡΙΣΤΩ: Είδαμε χέρι στο στήθος πρόσφατα ΚΑΙ τώρα ενώθηκαν οι άκρες μπροστά
-                else if (tips_gathered && (currentTimeSec - step_efcharisto_1_time < 3.0)) {
+                // ΕΥΧΑΡΙΣΤΩ: Είδαμε το χέρι στο στήθος πρόσφατα ΚΑΙ τώρα έγιναν "πουγκί" τα δάχτυλα
+                else if (tips_gathered && (currentTimeSec - step_efcharisto_1_time < 5.0)) {
                     active_now = "ευχαριστώ";
                 }
-                // ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Οριζόντιο χέρι ψηλά στο πρόσωπο/πηγούνι (Απλό και στατικό)
-                else if (palm && is_horizontal && h_chin) {
+                // ΚΑΛΗΜΕΡΑ: Κυκλάκι με τα χέρια ψηλά (χωρίς να έχει προηγηθεί δείξιμο)
+                else if (is_circle && hand_is_up) {
+                    active_now = "καλημέρα";
+                }
+                // ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Οριζόντιο χέρι ψηλά
+                else if (palm && is_horizontal && hand_is_up) {
                     active_now = "καλό μεσημέρι";
                 }
-                // ΓΕΙΑ: Παλάμη με απλωμένα δάχτυλα ψηλά (Στατικό)
-                else if (palm && fingers_spread && h_high) {
+                // ΓΕΙΑ: Ανοιχτά δάχτυλα, ΑΥΣΤΗΡΑ μόνο όταν τα χέρια είναι ψηλά (για να μην πιάνει όταν τα κατεβάζεις)
+                else if (fingers_spread && hand_is_up) {
                     active_now = "γεια";
-                }
-                // ΚΑΛΗΜΕΡΑ: Δείκτης όρθιος (όχι προς την κάμερα) ψηλά
-                else if (idx && !pointing_camera && h_high) {
-                    active_now = "καλημέρα";
                 }
             }
 
