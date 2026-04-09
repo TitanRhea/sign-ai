@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - Dynamic Motion & Voice Control</title>
+    <title>SignAI - Data Collector v1</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -11,7 +11,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #1e1e1e;
+            background-color: #121212;
             color: white;
             text-align: center;
             margin: 0;
@@ -20,336 +20,203 @@
         .container {
             position: relative;
             display: inline-block;
-            margin-top: 20px;
-            border: 4px solid #4CAF50;
+            margin-top: 10px;
+            border: 4px solid #333;
             border-radius: 10px;
             overflow: hidden;
         }
-        video {
-            display: none;
+        .recording-border {
+            border-color: #ff3333 !important;
+            box-shadow: 0 0 20px #ff3333;
         }
-        canvas {
-            transform: scaleX(-1);
-            background-color: black;
-        }
+        video { display: none; }
+        canvas { transform: scaleX(-1); background-color: #000; }
+        
         #ui-layer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 20px;
-            box-sizing: border-box;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; align-items: center; justify-content: center;
         }
-        #reading-box {
-            align-self: flex-start;
-            background: rgba(255, 0, 0, 0.7);
-            padding: 10px 20px;
-            font-size: 24px;
-            font-weight: bold;
-            border-radius: 5px;
-            display: none;
+        #rec-status {
+            font-size: 60px; font-weight: bold; color: #ff3333;
+            background: rgba(0,0,0,0.6); padding: 20px 40px; border-radius: 15px;
+            display: none; text-shadow: 2px 2px 5px black;
         }
-        #final-word {
-            align-self: center;
-            background: rgba(0, 255, 0, 0.8);
-            color: black;
-            padding: 15px 40px;
-            font-size: 32px;
-            font-weight: bold;
-            border-radius: 10px;
-            text-transform: uppercase;
-            display: none;
-            margin-bottom: 20px;
+        
+        .panel {
+            margin-top: 20px; background: #1e1e1e; padding: 20px;
+            border-radius: 10px; display: inline-block; border: 1px solid #444;
         }
-        #voice-indicator {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(33, 150, 243, 0.8);
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 14px;
-            font-weight: bold;
+        input[type="text"] {
+            padding: 10px; font-size: 18px; border-radius: 5px;
+            border: none; margin-right: 10px; width: 200px; text-transform: lowercase;
         }
-        h1 { margin-top: 0; color: #4CAF50; }
+        button {
+            padding: 10px 20px; font-size: 18px; border-radius: 5px;
+            border: none; cursor: pointer; font-weight: bold; color: white; margin: 0 5px;
+        }
+        #btn-rec { background-color: #f44336; }
+        #btn-rec:hover { background-color: #d32f2f; }
+        #btn-save { background-color: #4CAF50; }
+        #btn-save:hover { background-color: #388E3C; }
+        
+        .stats { margin-top: 15px; font-size: 18px; color: #aaa; }
+        .log-box { 
+            margin-top: 20px; width: 600px; height: 100px; background: #000; 
+            border: 1px solid #333; display: inline-block; text-align: left; 
+            overflow-y: auto; padding: 10px; font-family: monospace; color: #0f0;
+        }
     </style>
 </head>
 <body>
 
-    <h1>🚀 SignAI Web: Αμφίδρομη Επικοινωνία</h1>
-    <p>Δείξε μια χειρονομία στην κάμερα. Πάτα το <b>1</b> για Άντρα και το <b>2</b> για Γυναίκα.</p>
+    <h1>🧠 SignAI: Εργαλείο Συλλογής Δεδομένων</h1>
+    <p>Εκπαιδεύουμε το σύστημα! Διάλεξε λέξη και γράψε την κίνησή σου (30 καρέ τη φορά).</p>
 
-    <div class="container">
+    <div class="panel">
+        <input type="text" id="label-input" placeholder="π.χ. καλημερα" value="καλημερα">
+        <button id="btn-rec">🔴 Εγγραφή (Space)</button>
+        <button id="btn-save">💾 Αποθήκευση Δεδομένων</button>
+        <div class="stats">Συνολικά Δείγματα: <span id="sample-count" style="color:white; font-weight:bold;">0</span></div>
+    </div><br>
+
+    <div class="container" id="video-container">
         <video id="video_element" width="640" height="480" autoplay></video>
         <canvas id="canvas_element" width="640" height="480"></canvas>
         <div id="ui-layer">
-            <div id="voice-indicator">Φωνή: Γυναίκα (Προεπιλογή)</div>
-            <div id="reading-box">READING: <span id="current-scan">...</span></div>
-            <div id="final-word"></div>
+            <div id="rec-status">REC (0/30)</div>
         </div>
-    </div>
+    </div><br>
+
+    <div class="log-box" id="log-console">Σύστημα Έτοιμο. Αναμονή για κάμερα...<br></div>
 
     <script>
         const videoElement = document.getElementById('video_element');
         const canvasElement = document.getElementById('canvas_element');
         const canvasCtx = canvasElement.getContext('2d');
-        const readingBox = document.getElementById('reading-box');
-        const currentScanText = document.getElementById('current-scan');
-        const finalWordBox = document.getElementById('final-word');
-        const voiceIndicator = document.getElementById('voice-indicator');
+        const recStatus = document.getElementById('rec-status');
+        const videoContainer = document.getElementById('video-container');
+        const labelInput = document.getElementById('label-input');
+        const sampleCountText = document.getElementById('sample-count');
+        const logConsole = document.getElementById('log-console');
 
-        // --- ΕΠΙΛΟΓΗ ΦΩΝΗΣ (ΠΛΗΚΤΡΑ 1 & 2) ---
-        let preferredGender = 'female'; 
-        
+        // --- ΜΕΤΑΒΛΗΤΕΣ ΚΑΤΑΓΡΑΦΗΣ ---
+        let dataset = []; // Εδώ αποθηκεύονται όλα
+        let isRecording = false;
+        let currentSequence = [];
+        const FRAMES_PER_SEQUENCE = 30; // Καταγράφουμε 30 καρέ ανά κίνηση
+
+        function log(msg) {
+            logConsole.innerHTML += msg + "<br>";
+            logConsole.scrollTop = logConsole.scrollHeight;
+        }
+
+        // --- ΕΚΚΙΝΗΣΗ ΕΓΓΡΑΦΗΣ ---
+        function startRecording() {
+            if (isRecording) return;
+            const label = labelInput.value.trim().toLowerCase();
+            if (label === "") {
+                alert("Γράψε μια λέξη πρώτα!");
+                return;
+            }
+
+            log(`Προετοιμασία για: [${label}]...`);
+            
+            // Αντίστροφη μέτρηση 1 δευτερόλεπτο για να ετοιμαστείς
+            setTimeout(() => {
+                isRecording = true;
+                currentSequence = [];
+                videoContainer.classList.add("recording-border");
+                recStatus.style.display = "block";
+                log(`🔴 RECORDING ξεκίνησε! Κάνε την κίνηση.`);
+            }, 1000);
+        }
+
+        document.getElementById('btn-rec').addEventListener('click', startRecording);
         window.addEventListener('keydown', (e) => {
-            if (e.key === '1') {
-                preferredGender = 'male';
-                voiceIndicator.innerText = "Φωνή: Άντρας";
-                console.log("Επιλέχθηκε Αντρική Φωνή");
-            } else if (e.key === '2') {
-                preferredGender = 'female';
-                voiceIndicator.innerText = "Φωνή: Γυναίκα";
-                console.log("Επιλέχθηκε Γυναικεία Φωνή");
+            if (e.code === 'Space' && document.activeElement !== labelInput) {
+                e.preventDefault();
+                startRecording();
             }
         });
 
-        function speakGreek(text) {
-            window.speechSynthesis.cancel();
-            let utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'el-GR';
-            utterance.rate = 1.0;
-
-            let voices = window.speechSynthesis.getVoices().filter(v => v.lang.includes('el'));
-            if (voices.length > 0) {
-                let selectedVoice = voices[0]; // Προεπιλογή η πρώτη διαθέσιμη
-                
-                // Προσπάθεια εύρεσης συγκεκριμένου φύλου βάσει ονόματος (π.χ. Windows TTS)
-                for (let v of voices) {
-                    let name = v.name.toLowerCase();
-                    if (preferredGender === 'male' && (name.includes('stefanos') || name.includes('male'))) {
-                        selectedVoice = v;
-                        break;
-                    } else if (preferredGender === 'female' && (name.includes('zira') || name.includes('female'))) {
-                        selectedVoice = v;
-                        break;
-                    }
-                }
-                // Αν δεν βρει ονομαστικά, και έχουμε πάνω από 1 φωνή, χρησιμοποιεί εναλλακτική
-                if (preferredGender === 'male' && voices.length > 1 && !selectedVoice.name.toLowerCase().includes('stefanos')) {
-                    selectedVoice = voices[1]; // Συνήθως η 2η είναι η αντρική αν υπάρχει
-                }
-                utterance.voice = selectedVoice;
+        // --- ΑΠΟΘΗΚΕΥΣΗ JSON ---
+        document.getElementById('btn-save').addEventListener('click', () => {
+            if (dataset.length === 0) {
+                alert("Δεν υπάρχουν δεδομένα για αποθήκευση!");
+                return;
             }
-            
-            window.speechSynthesis.speak(utterance);
-        }
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataset));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href",     dataStr);
+            downloadAnchorNode.setAttribute("download", "sign_dataset.json");
+            document.body.appendChild(downloadAnchorNode); 
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+            log(`💾 Αποθηκεύτηκαν ${dataset.length} δείγματα!`);
+        });
 
-        // Φόρτωση φωνών από τον browser
-        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
-
-        // --- ΜΕΤΑΒΛΗΤΕΣ ΛΟΓΙΚΗΣ & ΜΝΗΜΗΣ ---
-        let recording = false;
-        let recording_started_at = 0;
-        let word_candidates = [];
-        
-        // Η ΝΕΑ ΜΝΗΜΗ ΚΙΝΗΣΗΣ (QUEUE)
-        const frameHistory = [];
-        const HISTORY_LENGTH = 15; 
-
-        // Μνήμη για τις κινήσεις 2 σταδίων
-        let step_onoma_1_time = 0;
-        let step_efcharisto_1_time = 0;
-
-        // --- ΡΥΘΜΙΣΗ MEDIAPIPE ---
+        // --- RENDER MEDIAPIPE ---
         const hands = new Hands({locateFile: (file) => {
             return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
         }});
-
         hands.setOptions({
-            maxNumHands: 2,
+            maxNumHands: 1, // Για το AI, εστιάζουμε σε 1 χέρι για αρχή (το κυρίαρχο)
             modelComplexity: 1,
             minDetectionConfidence: 0.7,
             minTrackingConfidence: 0.7
         });
 
-        hands.onResults(onResults);
-
-        const camera = new Camera(videoElement, {
-            onFrame: async () => {
-                await hands.send({image: videoElement});
-            },
-            width: 640,
-            height: 480
-        });
-        camera.start();
-
-        // --- ΒΑΣΙΚΗ ΛΟΓΙΚΗ ΕΠΕΞΕΡΓΑΣΙΑΣ ΚΑΡΕ ---
-        function onResults(results) {
+        hands.onResults((results) => {
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-            let active_now = null;
-            let currentTimeSec = performance.now() / 1000;
-
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const lm = results.multiHandLandmarks[0];
-                
-                drawConnectors(canvasCtx, lm, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
-                drawLandmarks(canvasCtx, lm, {color: '#FF0000', lineWidth: 2});
+                const landmarks = results.multiHandLandmarks[0];
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+                drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1});
 
-                // Αποθήκευση στο Queue (Μνήμη Κίνησης)
-                frameHistory.push(lm[0]); // Αποθηκεύουμε τη θέση του καρπού
-                if (frameHistory.length > HISTORY_LENGTH) {
-                    frameHistory.shift();
-                }
-
-                // Υπολογισμός Κίνησης στα τελευταία 15 καρέ
-                let movement_x = 0;
-                let movement_y = 0;
-                if (frameHistory.length === HISTORY_LENGTH) {
-                    let xs = frameHistory.map(p => p.x);
-                    let ys = frameHistory.map(p => p.y);
-                    movement_x = Math.max(...xs) - Math.min(...xs);
-                    movement_y = Math.max(...ys) - Math.min(...ys);
-                }
-
-                // Υψομετρικές ζώνες
-                let y_wrist = lm[0].y;
-                let hand_is_up = y_wrist < 0.70; 
-                let h_chin = y_wrist < 0.45;  
-                let h_chest = y_wrist >= 0.45; 
-
-                // Κατάσταση δαχτύλων
-                let is_index_up = lm[8].y < lm[6].y;
-                let is_middle_up = lm[12].y < lm[10].y;
-                let is_ring_up = lm[16].y < lm[14].y;
-                let is_pinky_up = lm[20].y < lm[18].y;
-
-                let up_count = 0;
-                if(is_index_up) up_count++;
-                if(is_middle_up) up_count++;
-                if(is_ring_up) up_count++;
-                if(is_pinky_up) up_count++;
-
-                let palm = (up_count >= 3);
-                let idx = (up_count === 1 && is_index_up);
-
-                // ΑΙΣΘΗΤΗΡΕΣ (Συνδυασμός Στάσης + Κίνησης)
-                
-                // 1. ΓΕΙΑ: Ανοιχτή παλάμη ΚΑΙ κίνηση δεξιά-αριστερά (X axis)
-                let dist_index_pinky = Math.hypot(lm[8].x - lm[20].x, lm[8].y - lm[20].y);
-                let fingers_spread = dist_index_pinky > 0.15 && palm;
-                let is_waving = fingers_spread && hand_is_up && (movement_x > 0.05);
-
-                // 2. ΚΑΛΗΜΕΡΑ: Δείκτης όρθιος ΚΑΙ το χέρι κατεβαίνει (Y axis movement)
-                let is_greeting_down = idx && hand_is_up && (movement_y > 0.05);
-
-                // 3. ΟΝΟΜΑ (ΒΗΜΑ 2): Κυκλάκι σταθερό
-                let thumb_index_dist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
-                let is_circle = thumb_index_dist < 0.06;
-
-                // 4. ΕΥΧΑΡΙΣΤΩ (ΒΗΜΑ 2): Πουγκί
-                let thumb_middle_dist = Math.hypot(lm[4].x - lm[12].x, lm[4].y - lm[12].y);
-                let tips_gathered = thumb_index_dist < 0.08 && thumb_middle_dist < 0.08 && !palm;
-
-                // 5. ΟΝΟΜΑ (ΒΗΜΑ 1): Δείξιμο κάμερα
-                let foreshortened_index = Math.hypot(lm[8].x - lm[5].x, lm[8].y - lm[5].y) < 0.08;
-                let pointing_camera = foreshortened_index && lm[8].z < -0.04;
-
-                // 6. ΚΑΛΟ ΜΕΣΗΜΕΡΙ: Οριζόντιο χέρι σταθερό
-                let is_horizontal = Math.abs(lm[9].x - lm[0].x) > Math.abs(lm[9].y - lm[0].y) * 1.2;
-
-                // --- 1. ΚΑΤΑΓΡΑΦΗ ΜΝΗΜΗΣ ΣΤΑΔΙΩΝ (5 δευτερόλεπτα) ---
-                if (pointing_camera) {
-                    step_onoma_1_time = currentTimeSec;
-                }
-                
-                let fingers_together = dist_index_pinky <= 0.12 && palm;
-                if (palm && fingers_together && h_chest) {
-                    step_efcharisto_1_time = currentTimeSec;
-                }
-
-                // --- 2. ΙΕΡΑΡΧΙΑ ΔΥΝΑΜΙΚΩΝ ΚΑΝΟΝΩΝ ---
-
-                if (is_circle && (currentTimeSec - step_onoma_1_time < 5.0)) {
-                    active_now = "ποιο είναι το όνομά σου";
-                }
-                else if (tips_gathered && (currentTimeSec - step_efcharisto_1_time < 5.0)) {
-                    active_now = "ευχαριστώ";
-                }
-                // Η Καλημέρα πλέον απαιτεί κίνηση (να κατεβαίνει το χέρι)
-                else if (is_greeting_down) {
-                    active_now = "καλημέρα";
-                }
-                // Το Καλό Μεσημέρι απαιτεί σταθερότητα (όχι μεγάλη κίνηση Y)
-                else if (palm && is_horizontal && h_chin && movement_y < 0.08) {
-                    active_now = "καλό μεσημέρι";
-                }
-                // Το Γεια απαιτεί κίνηση δεξιά-αριστερά (ώστε να μην πιάνει το άνοιγμα των χεριών στο τέλος)
-                else if (is_waving) {
-                    active_now = "γεια";
-                }
-            } else {
-                // Καθαρισμός ιστορικού αν χαθεί το χέρι
-                frameHistory.length = 0; 
-            }
-
-            // --- ΣΥΣΤΗΜΑ RECORDING ---
-            if (active_now) {
-                if (!recording) {
-                    recording = true;
-                    recording_started_at = currentTimeSec;
-                    word_candidates = [active_now];
-                    
-                    readingBox.style.display = 'block';
-                    currentScanText.innerText = active_now;
-                } else {
-                    word_candidates.push(active_now);
-                    current_word = active_now;
-                    currentScanText.innerText = current_word;
-                }
-            }
-
-            if (recording) {
-                if ((currentTimeSec - recording_started_at) >= 0.8) {
-                    if (word_candidates.length > 0) {
-                        let counts = {};
-                        let maxWord = word_candidates[0];
-                        let maxCount = 0;
-                        for (let w of word_candidates) {
-                            counts[w] = (counts[w] || 0) + 1;
-                            if (counts[w] > maxCount) {
-                                maxCount = counts[w];
-                                maxWord = w;
-                            }
-                        }
-
-                        let final = maxWord;
-                        speakGreek(final);
-
-                        finalWordBox.innerText = final;
-                        finalWordBox.style.display = 'block';
-                        
-                        setTimeout(() => {
-                            finalWordBox.style.display = 'none';
-                        }, 2000);
+                // Λογική Καταγραφής
+                if (isRecording) {
+                    // Μετατροπή 21 σημείων (x,y,z) σε έναν μονοδιάστατο πίνακα 63 αριθμών
+                    let flatLandmarks = [];
+                    for (let i = 0; i < landmarks.length; i++) {
+                        flatLandmarks.push(landmarks[i].x, landmarks[i].y, landmarks[i].z);
                     }
-                    recording = false;
-                    current_word = null;
-                    readingBox.style.display = 'none';
+                    
+                    currentSequence.push(flatLandmarks);
+                    recStatus.innerText = `REC (${currentSequence.length}/${FRAMES_PER_SEQUENCE})`;
+
+                    // Όταν φτάσουμε τα 30 καρέ, σταματάμε την καταγραφή
+                    if (currentSequence.length >= FRAMES_PER_SEQUENCE) {
+                        isRecording = false;
+                        videoContainer.classList.remove("recording-border");
+                        recStatus.style.display = "none";
+                        
+                        // Αποθήκευση της κίνησης στο dataset
+                        dataset.push({
+                            label: labelInput.value.trim().toLowerCase(),
+                            sequence: currentSequence
+                        });
+                        
+                        sampleCountText.innerText = dataset.length;
+                        log(`✅ Ολοκληρώθηκε 1 δείγμα για: [${labelInput.value}]`);
+                    }
                 }
             } else {
-                readingBox.style.display = 'none';
+                if (isRecording) {
+                    // Αν χαθεί το χέρι κατά την εγγραφή, δεν καταγράφουμε κενά δεδομένα.
+                    recStatus.innerText = "ΧΑΘΗΚΕ ΤΟ ΧΕΡΙ!";
+                }
             }
-
             canvasCtx.restore();
-        }
+        });
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => { await hands.send({image: videoElement}); },
+            width: 640, height: 480
+        });
+        camera.start().then(() => { log("Κάμερα ενεργή."); });
     </script>
 </body>
 </html>
