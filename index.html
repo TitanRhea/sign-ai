@@ -160,10 +160,10 @@
             return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
         }});
         hands.setOptions({
-            maxNumHands: 1, // Για το AI, εστιάζουμε σε 1 χέρι για αρχή (το κυρίαρχο)
+            maxNumHands: 1, 
             modelComplexity: 1,
-            minDetectionConfidence: 0.7,
-            minTrackingConfidence: 0.7
+            minDetectionConfidence: 0.5, // Μειώθηκε για ευκολότερη ανίχνευση
+            minTrackingConfidence: 0.5   // Μειώθηκε για πιο σταθερή παρακολούθηση
         });
 
         hands.onResults((results) => {
