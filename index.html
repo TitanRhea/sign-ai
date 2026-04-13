@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - 2AI Powered</title>
+    <title>SignAI Web - AI Powered</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -18,6 +18,8 @@
         #final-word { align-self: center; background: rgba(0, 255, 0, 0.8); color: black; padding: 15px 40px; font-size: 36px; font-weight: bold; border-radius: 10px; text-transform: uppercase; display: none; margin-bottom: 20px; text-shadow: 1px 1px 2px rgba(255,255,255,0.5); }
         #voice-indicator { position: absolute; top: 10px; right: 10px; background: rgba(33, 150, 243, 0.8); padding: 5px 10px; border-radius: 5px; font-size: 14px; font-weight: bold; }
         #status-box { position: absolute; top: 10px; left: 10px; background: rgba(255, 152, 0, 0.8); padding: 5px 10px; border-radius: 5px; font-size: 14px; font-weight: bold; color: black;}
+        /* ΝΕΟ: Ζωντανό Ραντάρ Οθόνης */
+        #live-radar { position: absolute; bottom: 10px; left: 10px; background: rgba(0, 0, 0, 0.7); padding: 10px; border-radius: 8px; font-size: 18px; color: #00FF00; font-family: monospace; text-align: left;}
         h1 { margin-top: 0; color: #4CAF50; }
     </style>
 </head>
@@ -33,6 +35,7 @@
             <div id="status-box">Φόρτωση AI...</div>
             <div id="voice-indicator">Φωνή: Γυναίκα (Προεπιλογή)</div>
             <div id="final-word"></div>
+            <div id="live-radar">Ραντάρ: Αναμονή...</div>
         </div>
     </div>
 
@@ -43,6 +46,7 @@
         const finalWordBox = document.getElementById('final-word');
         const voiceIndicator = document.getElementById('voice-indicator');
         const statusBox = document.getElementById('status-box');
+        const liveRadar = document.getElementById('live-radar'); // Το νέο ραντάρ
 
         let preferredGender = 'female'; 
         window.addEventListener('keydown', (e) => {
@@ -80,7 +84,6 @@
         let lastSpokenTime = 0;
         let lastSpokenWord = "";
 
-        // Φόρτωση AI
         async function loadAI() {
             try {
                 const labelsResponse = await fetch('./classes.json');
@@ -91,11 +94,9 @@
                 
                 statusBox.innerText = "✅ AI Έτοιμο!";
                 statusBox.style.background = "rgba(0, 255, 0, 0.8)";
-                console.log("Το μοντέλο φορτώθηκε!");
             } catch (error) {
-                statusBox.innerText = "❌ Σφάλμα φόρτωσης (δες F12)";
+                statusBox.innerText = "❌ Σφάλμα φόρτωσης";
                 statusBox.style.background = "rgba(255, 0, 0, 0.8)";
-                console.error("Λεπτομέρειες σφάλματος:", error);
             }
         }
         loadAI();
@@ -139,32 +140,30 @@
 
                             let detectedWord = labels[maxScoreIndex];
                             
-                            // ΑΥΤΟ ΕΙΝΑΙ ΤΟ ΡΑΝΤΑΡ ΜΑΣ ΓΙΑ ΤΟ F12
-                            console.log("Βλέπω: " + detectedWord + " | Σιγουριά: " + Math.round(confidence * 100) + "%");
+                            // Ανανέωση του ζωντανού ραντάρ στην οθόνη
+                            liveRadar.innerText = "Σκέφτομαι: " + detectedWord + " (" + Math.round(confidence * 100) + "%)";
 
-                            // ΚΑΤΕΒΑΣΑΜΕ ΤΟ ΟΡΙΟ ΣΤΟ 60% ΓΙΑ ΔΟΚΙΜΗ
-                            if (confidence > 0.60) { 
+                            // Κατεβάσαμε το όριο στο 40% (0.40)
+                            if (confidence > 0.40) { 
                                 if (detectedWord !== lastSpokenWord || (currentTimeSec - lastSpokenTime) > 3.0) {
                                     speakGreek(detectedWord);
                                     lastSpokenWord = detectedWord;
                                     lastSpokenTime = currentTimeSec;
                                     
-                                    finalWordBox.innerText = detectedWord + " (" + Math.round(confidence * 100) + "%)";
+                                    finalWordBox.innerText = detectedWord;
                                     finalWordBox.style.display = 'block';
                                     setTimeout(() => { finalWordBox.style.display = 'none'; }, 2000);
                                     
-                                    // ΔΕΝ αδειάζουμε εντελώς την ουρά, αφήνουμε μισή για πιο ομαλή συνέχεια
                                     sequence = sequence.slice(15); 
                                 }
                             }
                             tf.dispose([inputTensor, prediction]);
-                        } catch (e) {
-                            console.error("Σφάλμα πρόβλεψης:", e);
-                        }
+                        } catch (e) {}
                     }
                 }
+            } else {
+                liveRadar.innerText = "Δεν βλέπω χέρια...";
             }
-            // Αφαιρέθηκε το reset της ουράς για να μην χάνεται η κίνηση αν τρέμει η κάμερα
             canvasCtx.restore();
         });
 
