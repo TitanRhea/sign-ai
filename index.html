@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - AI Powered</title>
+    <title>SignAI Web - 2AI Powered</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -80,15 +80,13 @@
         let lastSpokenTime = 0;
         let lastSpokenWord = "";
 
-        // Φόρτωση AI - Ψάχνει ακριβώς δίπλα στο index.html
+        // Φόρτωση AI
         async function loadAI() {
             try {
-                // Διαβάζει το classes.json κατευθείαν
                 const labelsResponse = await fetch('./classes.json');
                 if (!labelsResponse.ok) throw new Error("Δεν βρέθηκε το classes.json");
                 labels = await labelsResponse.json();
                 
-                // Διαβάζει το model.json κατευθείαν
                 model = await tf.loadLayersModel('./model.json');
                 
                 statusBox.innerText = "✅ AI Έτοιμο!";
@@ -132,30 +130,41 @@
                     if (sequence.length > FRAMES_PER_SEQUENCE) sequence.shift();
 
                     if (sequence.length === FRAMES_PER_SEQUENCE) {
-                        const inputTensor = tf.tensor2d([sequence.flat()]);
-                        const prediction = model.predict(inputTensor);
-                        const scores = prediction.dataSync();
-                        const maxScoreIndex = scores.indexOf(Math.max(...scores));
-                        const confidence = scores[maxScoreIndex];
+                        try {
+                            const inputTensor = tf.tensor2d([sequence.flat()]);
+                            const prediction = model.predict(inputTensor);
+                            const scores = prediction.dataSync();
+                            const maxScoreIndex = scores.indexOf(Math.max(...scores));
+                            const confidence = scores[maxScoreIndex];
 
-                        if (confidence > 0.90) {
                             let detectedWord = labels[maxScoreIndex];
-                            if (detectedWord !== lastSpokenWord || (currentTimeSec - lastSpokenTime) > 3.0) {
-                                speakGreek(detectedWord);
-                                lastSpokenWord = detectedWord;
-                                lastSpokenTime = currentTimeSec;
-                                finalWordBox.innerText = detectedWord;
-                                finalWordBox.style.display = 'block';
-                                setTimeout(() => { finalWordBox.style.display = 'none'; }, 2000);
-                                sequence = []; 
+                            
+                            // ΑΥΤΟ ΕΙΝΑΙ ΤΟ ΡΑΝΤΑΡ ΜΑΣ ΓΙΑ ΤΟ F12
+                            console.log("Βλέπω: " + detectedWord + " | Σιγουριά: " + Math.round(confidence * 100) + "%");
+
+                            // ΚΑΤΕΒΑΣΑΜΕ ΤΟ ΟΡΙΟ ΣΤΟ 60% ΓΙΑ ΔΟΚΙΜΗ
+                            if (confidence > 0.60) { 
+                                if (detectedWord !== lastSpokenWord || (currentTimeSec - lastSpokenTime) > 3.0) {
+                                    speakGreek(detectedWord);
+                                    lastSpokenWord = detectedWord;
+                                    lastSpokenTime = currentTimeSec;
+                                    
+                                    finalWordBox.innerText = detectedWord + " (" + Math.round(confidence * 100) + "%)";
+                                    finalWordBox.style.display = 'block';
+                                    setTimeout(() => { finalWordBox.style.display = 'none'; }, 2000);
+                                    
+                                    // ΔΕΝ αδειάζουμε εντελώς την ουρά, αφήνουμε μισή για πιο ομαλή συνέχεια
+                                    sequence = sequence.slice(15); 
+                                }
                             }
+                            tf.dispose([inputTensor, prediction]);
+                        } catch (e) {
+                            console.error("Σφάλμα πρόβλεψης:", e);
                         }
-                        tf.dispose([inputTensor, prediction]);
                     }
                 }
-            } else {
-                sequence = [];
             }
+            // Αφαιρέθηκε το reset της ουράς για να μην χάνεται η κίνηση αν τρέμει η κάμερα
             canvasCtx.restore();
         });
 
