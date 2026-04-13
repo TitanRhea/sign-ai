@@ -4,11 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SignAI Web - AI Powered</title>
-    <!-- Εργαλεία MediaPipe -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    <!-- Εργαλείο TensorFlow.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
     
     <style>
@@ -88,25 +86,25 @@
         let model;
         let labels = [];
         let sequence = [];
-        const FRAMES_PER_SEQUENCE = 30; // Ίδιο με το Python script
+        const FRAMES_PER_SEQUENCE = 30; // Περιμένει 30 καρέ κίνησης (περίπου 1 δευτερόλεπτο)
         let lastSpokenTime = 0;
         let lastSpokenWord = "";
 
-        // Φόρτωση του Μοντέλου και του Λεξικού
+        // Φόρτωση του Μοντέλου και του Λεξικού (ΕΔΩ ΕΙΝΑΙ ΤΟ ΜΥΣΤΙΚΟ ΓΙΑ ΤΟΝ ΦΑΚΕΛΟ)
         async function loadAI() {
             try {
-                // Φορτώνουμε το λεξικό
+                // Ψάχνει το αρχείο classes.json μέσα στον φάκελο model
                 const labelsResponse = await fetch('./model/classes.json');
                 labels = await labelsResponse.json();
                 
-                // Φορτώνουμε το νευρωνικό δίκτυο
+                // Ψάχνει το αρχείο model.json μέσα στον φάκελο model
                 model = await tf.loadLayersModel('./model/model.json');
                 
                 statusBox.innerText = "✅ AI Έτοιμο!";
                 statusBox.style.background = "rgba(0, 255, 0, 0.8)";
                 console.log("Το μοντέλο φορτώθηκε με επιτυχία!");
             } catch (error) {
-                statusBox.innerText = "❌ Σφάλμα φόρτωσης (Δες το Βήμα 3)";
+                statusBox.innerText = "❌ Σφάλμα φόρτωσης";
                 statusBox.style.background = "rgba(255, 0, 0, 0.8)";
                 console.error("Σφάλμα:", error);
             }
@@ -117,7 +115,8 @@
         const hands = new Hands({locateFile: (file) => {
             return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
         }});
-        // Ακριβώς ίδιες ρυθμίσεις με το data collector για τέλεια ταύτιση
+        
+        // Ίδιες ρυθμίσεις με το εργαλείο καταγραφής
         hands.setOptions({
             maxNumHands: 1, 
             modelComplexity: 1,
@@ -138,7 +137,7 @@
                 drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1});
 
                 if (model && labels.length > 0) {
-                    // 1. Μετατροπή landmarks σε flat array (ακριβώς όπως στο Python)
+                    // 1. Μετατροπή landmarks σε flat array (όπως στην Python)
                     let flatLandmarks = [];
                     for (let i = 0; i < landmarks.length; i++) {
                         flatLandmarks.push(landmarks[i].x, landmarks[i].y, landmarks[i].z);
@@ -150,9 +149,8 @@
                         sequence.shift(); // Πετάμε το παλιότερο, κρατάμε μόνο τα τελευταία 30
                     }
 
-                    // 3. Πρόβλεψη!
+                    // 3. Πρόβλεψη όταν μαζευτούν 30 καρέ
                     if (sequence.length === FRAMES_PER_SEQUENCE) {
-                        // Ενώνουμε τα 30x63 = 1890 νούμερα σε μια τεράστια σειρά
                         let inputArray = sequence.flat();
                         
                         // Το ταΐζουμε στο AI
@@ -164,7 +162,7 @@
                         const maxScoreIndex = scores.indexOf(Math.max(...scores));
                         const confidence = scores[maxScoreIndex];
 
-                        // Αν το AI είναι 90% σίγουρο ΚΑΙ έχουν περάσει 3 δευτερόλεπτα από την τελευταία φορά που μίλησε
+                        // Αν το AI είναι πάνω από 90% σίγουρο ΚΑΙ έχουν περάσει 3 δευτερόλεπτα από το προηγούμενο
                         if (confidence > 0.90) {
                             let detectedWord = labels[maxScoreIndex];
                             
@@ -183,12 +181,12 @@
                                 sequence = []; 
                             }
                         }
-                        // Καθαρισμός μνήμης (חשוב για το memory leak)
+                        // Καθαρισμός μνήμης για να μην "κολλήσει" ο browser
                         tf.dispose([inputTensor, prediction]);
                     }
                 }
             } else {
-                // Αν χαθεί το χέρι, αδειάζουμε τη μνήμη της κίνησης
+                // Αν χαθεί το χέρι από την κάμερα, μηδενίζουμε την κίνηση
                 sequence = [];
             }
             canvasCtx.restore();
