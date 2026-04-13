@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - AI Powered</title>
+    <title>SignAI Web - 1AI Powered</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -44,7 +44,6 @@
         const voiceIndicator = document.getElementById('voice-indicator');
         const statusBox = document.getElementById('status-box');
 
-        // --- ΕΠΙΛΟΓΗ ΦΩΝΗΣ ---
         let preferredGender = 'female'; 
         window.addEventListener('keydown', (e) => {
             if (e.key === '1') {
@@ -61,62 +60,50 @@
             let utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'el-GR';
             utterance.rate = 1.0;
-
             let voices = window.speechSynthesis.getVoices().filter(v => v.lang.includes('el'));
             if (voices.length > 0) {
                 let selectedVoice = voices[0]; 
                 for (let v of voices) {
                     let name = v.name.toLowerCase();
-                    if (preferredGender === 'male' && (name.includes('stefanos') || name.includes('male'))) {
-                        selectedVoice = v; break;
-                    } else if (preferredGender === 'female' && (name.includes('zira') || name.includes('female'))) {
-                        selectedVoice = v; break;
-                    }
-                }
-                if (preferredGender === 'male' && voices.length > 1 && !selectedVoice.name.toLowerCase().includes('stefanos')) {
-                    selectedVoice = voices[1]; 
+                    if (preferredGender === 'male' && (name.includes('stefanos') || name.includes('male'))) { selectedVoice = v; break; }
+                    else if (preferredGender === 'female' && (name.includes('zira') || name.includes('female'))) { selectedVoice = v; break; }
                 }
                 utterance.voice = selectedVoice;
             }
             window.speechSynthesis.speak(utterance);
         }
-        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
 
-        // --- AI ΜΕΤΑΒΛΗΤΕΣ ---
         let model;
         let labels = [];
         let sequence = [];
-        const FRAMES_PER_SEQUENCE = 30; // Περιμένει 30 καρέ κίνησης (περίπου 1 δευτερόλεπτο)
+        const FRAMES_PER_SEQUENCE = 30;
         let lastSpokenTime = 0;
         let lastSpokenWord = "";
 
-        // Φόρτωση του Μοντέλου και του Λεξικού (ΕΔΩ ΕΙΝΑΙ ΤΟ ΜΥΣΤΙΚΟ ΓΙΑ ΤΟΝ ΦΑΚΕΛΟ)
+        // Φόρτωση AI - Διορθωμένη διαδρομή για GitHub
         async function loadAI() {
             try {
-                // Ψάχνει το αρχείο classes.json μέσα στον φάκελο model
-                const labelsResponse = await fetch('./model/classes.json');
+                // Χρησιμοποιούμε σχετική διαδρομή χωρίς την τελεία στην αρχή για μεγαλύτερη συμβατότητα
+                const labelsResponse = await fetch('model/classes.json');
+                if (!labelsResponse.ok) throw new Error("Δεν βρέθηκε το classes.json");
                 labels = await labelsResponse.json();
                 
-                // Ψάχνει το αρχείο model.json μέσα στον φάκελο model
-                model = await tf.loadLayersModel('./model/model.json');
+                model = await tf.loadLayersModel('model/model.json');
                 
                 statusBox.innerText = "✅ AI Έτοιμο!";
                 statusBox.style.background = "rgba(0, 255, 0, 0.8)";
-                console.log("Το μοντέλο φορτώθηκε με επιτυχία!");
+                console.log("Το μοντέλο φορτώθηκε!");
             } catch (error) {
-                statusBox.innerText = "❌ Σφάλμα φόρτωσης";
+                statusBox.innerText = "❌ Σφάλμα 404: Δες την κονσόλα";
                 statusBox.style.background = "rgba(255, 0, 0, 0.8)";
-                console.error("Σφάλμα:", error);
+                console.error("Λεπτομέρειες σφάλματος:", error);
             }
         }
         loadAI();
 
-        // --- RENDER MEDIAPIPE ---
         const hands = new Hands({locateFile: (file) => {
             return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
         }});
-        
-        // Ίδιες ρυθμίσεις με το εργαλείο καταγραφής
         hands.setOptions({
             maxNumHands: 1, 
             modelComplexity: 1,
@@ -128,7 +115,6 @@
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
             let currentTimeSec = performance.now() / 1000;
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
@@ -137,56 +123,36 @@
                 drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1});
 
                 if (model && labels.length > 0) {
-                    // 1. Μετατροπή landmarks σε flat array (όπως στην Python)
                     let flatLandmarks = [];
                     for (let i = 0; i < landmarks.length; i++) {
                         flatLandmarks.push(landmarks[i].x, landmarks[i].y, landmarks[i].z);
                     }
-                    
-                    // 2. Προσθήκη στην "ουρά" της μνήμης
                     sequence.push(flatLandmarks);
-                    if (sequence.length > FRAMES_PER_SEQUENCE) {
-                        sequence.shift(); // Πετάμε το παλιότερο, κρατάμε μόνο τα τελευταία 30
-                    }
+                    if (sequence.length > FRAMES_PER_SEQUENCE) sequence.shift();
 
-                    // 3. Πρόβλεψη όταν μαζευτούν 30 καρέ
                     if (sequence.length === FRAMES_PER_SEQUENCE) {
-                        let inputArray = sequence.flat();
-                        
-                        // Το ταΐζουμε στο AI
-                        const inputTensor = tf.tensor2d([inputArray]);
+                        const inputTensor = tf.tensor2d([sequence.flat()]);
                         const prediction = model.predict(inputTensor);
                         const scores = prediction.dataSync();
-                        
-                        // Βρίσκουμε ποια λέξη έχει το μεγαλύτερο σκορ
                         const maxScoreIndex = scores.indexOf(Math.max(...scores));
                         const confidence = scores[maxScoreIndex];
 
-                        // Αν το AI είναι πάνω από 90% σίγουρο ΚΑΙ έχουν περάσει 3 δευτερόλεπτα από το προηγούμενο
                         if (confidence > 0.90) {
                             let detectedWord = labels[maxScoreIndex];
-                            
                             if (detectedWord !== lastSpokenWord || (currentTimeSec - lastSpokenTime) > 3.0) {
-                                console.log(`✅ ${detectedWord} (${Math.round(confidence * 100)}%)`);
                                 speakGreek(detectedWord);
-                                
                                 lastSpokenWord = detectedWord;
                                 lastSpokenTime = currentTimeSec;
-                                
                                 finalWordBox.innerText = detectedWord;
                                 finalWordBox.style.display = 'block';
                                 setTimeout(() => { finalWordBox.style.display = 'none'; }, 2000);
-                                
-                                // Αδειάζουμε την ουρά για να μην επαναλαμβάνει τη λέξη αμέσως
                                 sequence = []; 
                             }
                         }
-                        // Καθαρισμός μνήμης για να μην "κολλήσει" ο browser
                         tf.dispose([inputTensor, prediction]);
                     }
                 }
             } else {
-                // Αν χαθεί το χέρι από την κάμερα, μηδενίζουμε την κίνηση
                 sequence = [];
             }
             canvasCtx.restore();
