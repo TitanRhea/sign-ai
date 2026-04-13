@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - AI Powered</title>
+    <title>SignAI Web - Final Version</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -15,7 +15,7 @@
         video { display: none; }
         canvas { transform: scaleX(-1); background-color: black; }
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; box-sizing: border-box; }
-        #final-word { align-self: center; background: rgba(0, 255, 0, 0.85); color: black; padding: 15px 40px; font-size: 42px; font-weight: bold; border-radius: 10px; text-transform: uppercase; display: none; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 2px solid white; }
+        #final-word { align-self: center; background: rgba(0, 255, 0, 0.9); color: black; padding: 15px 40px; font-size: 42px; font-weight: bold; border-radius: 10px; text-transform: uppercase; display: none; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         #voice-indicator { position: absolute; top: 10px; right: 10px; background: rgba(33, 150, 243, 0.9); padding: 5px 12px; border-radius: 5px; font-size: 14px; font-weight: bold; border: 1px solid white; }
         #status-box { position: absolute; top: 10px; left: 10px; background: rgba(255, 152, 0, 0.9); padding: 5px 12px; border-radius: 5px; font-size: 14px; font-weight: bold; color: black;}
         #live-radar { position: absolute; bottom: 10px; left: 10px; background: rgba(0, 0, 0, 0.8); padding: 12px; border-radius: 8px; font-size: 18px; color: #00FF00; font-family: 'Courier New', monospace; text-align: left; border: 1px solid #4CAF50; min-width: 200px;}
@@ -24,14 +24,14 @@
 </head>
 <body>
 
-    <h1>🚀 SignAI: Αναγνώριση Χειρονομιών</h1>
-    <p>Κάνε τη χειρονομία. Πάτα <b>1</b> για Άντρα ή <b>2</b> για Γυναίκα.</p>
+    <h1>🚀 SignAI: Τελική Ρύθμιση</h1>
+    <p>Κάνε τη χειρονομία σταθερά. Πάτα <b>1</b> (Άντρας) ή <b>2</b> (Γυναίκα).</p>
 
     <div class="container">
         <video id="video_element" width="640" height="480" autoplay></video>
         <canvas id="canvas_element" width="640" height="480"></canvas>
         <div id="ui-layer">
-            <div id="status-box">Φόρτωση AI...</div>
+            <div id="status-box">Φόρτωση...</div>
             <div id="voice-indicator">Φωνή: Αναμονή</div>
             <div id="final-word"></div>
             <div id="live-radar">Σύστημα: Έτοιμο</div>
@@ -49,12 +49,13 @@
 
         let preferredGender = 'female'; 
 
-        // Εξασφάλιση ότι οι φωνές του Chrome θα φορτωθούν
-        function loadVoices() {
-            window.speechSynthesis.getVoices();
+        // Δυναμική φόρτωση φωνών
+        let allVoices = [];
+        function getVoices() {
+            allVoices = window.speechSynthesis.getVoices();
+            console.log("Διαθέσιμες Φωνές:", allVoices.map(v => v.name));
         }
-        window.speechSynthesis.onvoiceschanged = loadVoices;
-        loadVoices();
+        window.speechSynthesis.onvoiceschanged = getVoices;
 
         window.addEventListener('keydown', (e) => {
             if (e.key === '1') { preferredGender = 'male'; voiceIndicator.innerText = "Φωνή: Άντρας"; }
@@ -65,28 +66,21 @@
             window.speechSynthesis.cancel();
             let utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'el-GR';
-            utterance.rate = 1.0;
             
-            let voices = window.speechSynthesis.getVoices().filter(v => v.lang.includes('el'));
-            if (voices.length > 0) {
-                let selectedVoice = voices[0]; 
-                for (let v of voices) {
+            let greekVoices = allVoices.filter(v => v.lang.includes('el'));
+            if (greekVoices.length > 0) {
+                let selectedVoice = greekVoices[0];
+                for (let v of greekVoices) {
                     let name = v.name.toLowerCase();
-                    if (preferredGender === 'male' && name.includes('stefanos')) { 
-                        selectedVoice = v; break; 
-                    }
-                    else if (preferredGender === 'female' && (name.includes('google') || name.includes('athina') || name.includes('female'))) { 
-                        selectedVoice = v; break; 
-                    }
+                    if (preferredGender === 'male' && name.includes('stefanos')) { selectedVoice = v; break; }
+                    if (preferredGender === 'female' && (name.includes('google') || name.includes('athina') || name.includes('female'))) { selectedVoice = v; break; }
                 }
                 utterance.voice = selectedVoice;
             }
             window.speechSynthesis.speak(utterance);
         }
 
-        let model;
-        let labels = [];
-        let sequence = [];
+        let model, labels = [], sequence = [];
         const FRAMES_PER_SEQUENCE = 30;
         let lastSpokenTime = 0;
         let lastSpokenWord = "";
@@ -96,23 +90,22 @@
                 const labelsResponse = await fetch('./classes.json');
                 labels = await labelsResponse.json();
                 model = await tf.loadLayersModel('./model.json');
-                statusBox.innerText = "✅ AI Συνδεδεμένο";
+                statusBox.innerText = "✅ Συνδεδεμένο";
                 statusBox.style.background = "rgba(0, 255, 0, 0.9)";
             } catch (error) {
-                statusBox.innerText = "❌ Σφάλμα Αρχείων";
-                statusBox.style.background = "rgba(255, 0, 0, 0.9)";
+                statusBox.innerText = "❌ Σφάλμα";
             }
         }
         loadAI();
 
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
 
         hands.onResults((results) => {
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-            let currentTimeSec = performance.now() / 1000;
+            let currentTime = performance.now() / 1000;
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const landmarks = results.multiHandLandmarks[0];
@@ -120,40 +113,37 @@
                 drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1});
 
                 if (model && labels.length > 0) {
-                    let flatLandmarks = [];
-                    for (let i = 0; i < landmarks.length; i++) {
-                        flatLandmarks.push(landmarks[i].x, landmarks[i].y, landmarks[i].z);
-                    }
-                    sequence.push(flatLandmarks);
+                    let flat = [];
+                    for (let l of landmarks) flat.push(l.x, l.y, l.z);
+                    sequence.push(flat);
                     if (sequence.length > FRAMES_PER_SEQUENCE) sequence.shift();
 
                     if (sequence.length === FRAMES_PER_SEQUENCE) {
-                        try {
-                            const inputTensor = tf.tensor2d([sequence.flat()]);
-                            const prediction = model.predict(inputTensor);
-                            const scores = prediction.dataSync();
-                            const maxScoreIndex = scores.indexOf(Math.max(...scores));
-                            const confidence = scores[maxScoreIndex];
-                            let detectedWord = labels[maxScoreIndex];
-                            
-                            liveRadar.innerText = "Ανάλυση: " + detectedWord + " (" + Math.round(confidence * 100) + "%)";
+                        const input = tf.tensor2d([sequence.flat()]);
+                        const prediction = model.predict(input);
+                        const scores = prediction.dataSync();
+                        const maxIndex = scores.indexOf(Math.max(...scores));
+                        const confidence = scores[maxIndex];
+                        let word = labels[maxIndex];
+                        
+                        liveRadar.innerText = `Ανάλυση: ${word} (${Math.round(confidence*100)}%)`;
 
-                            if (confidence > 0.40) { 
-                                if (detectedWord !== lastSpokenWord || (currentTimeSec - lastSpokenTime) > 3.0) {
-                                    speakGreek(detectedWord);
-                                    lastSpokenWord = detectedWord;
-                                    lastSpokenTime = currentTimeSec;
-                                    finalWordBox.innerText = detectedWord;
-                                    finalWordBox.style.display = 'block';
-                                    setTimeout(() => { finalWordBox.style.display = 'none'; }, 2000);
-                                    sequence = sequence.slice(15); 
-                                }
+                        // ΑΥΞΗΜΕΝΟ ΟΡΙΟ ΓΙΑ ΚΑΛΥΤΕΡΗ ΡΟΗ
+                        if (confidence > 0.55) { 
+                            if (word !== lastSpokenWord || (currentTime - lastSpokenTime) > 3.5) {
+                                speakGreek(word);
+                                lastSpokenWord = word;
+                                lastSpokenTime = currentTime;
+                                finalWordBox.innerText = word;
+                                finalWordBox.style.display = 'block';
+                                setTimeout(() => { finalWordBox.style.display = 'none'; }, 2000);
+                                sequence = sequence.slice(15); 
                             }
-                            tf.dispose([inputTensor, prediction]);
-                        } catch (e) {}
+                        }
+                        tf.dispose([input, prediction]);
                     }
                 }
-            } else { liveRadar.innerText = "Αναμονή για χέρι..."; }
+            } else { liveRadar.innerText = "Αναμονή..."; }
             canvasCtx.restore();
         });
 
