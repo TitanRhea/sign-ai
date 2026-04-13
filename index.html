@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - 1AI Powered</title>
+    <title>SignAI Web - AI Powered</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -80,21 +80,22 @@
         let lastSpokenTime = 0;
         let lastSpokenWord = "";
 
-        // Φόρτωση AI - Διορθωμένη διαδρομή για GitHub
+        // Φόρτωση AI - Ψάχνει ακριβώς δίπλα στο index.html
         async function loadAI() {
             try {
-                // Χρησιμοποιούμε σχετική διαδρομή χωρίς την τελεία στην αρχή για μεγαλύτερη συμβατότητα
-                const labelsResponse = await fetch('model/classes.json');
+                // Διαβάζει το classes.json κατευθείαν
+                const labelsResponse = await fetch('./classes.json');
                 if (!labelsResponse.ok) throw new Error("Δεν βρέθηκε το classes.json");
                 labels = await labelsResponse.json();
                 
-                model = await tf.loadLayersModel('model/model.json');
+                // Διαβάζει το model.json κατευθείαν
+                model = await tf.loadLayersModel('./model.json');
                 
                 statusBox.innerText = "✅ AI Έτοιμο!";
                 statusBox.style.background = "rgba(0, 255, 0, 0.8)";
                 console.log("Το μοντέλο φορτώθηκε!");
             } catch (error) {
-                statusBox.innerText = "❌ Σφάλμα 404: Δες την κονσόλα";
+                statusBox.innerText = "❌ Σφάλμα φόρτωσης (δες F12)";
                 statusBox.style.background = "rgba(255, 0, 0, 0.8)";
                 console.error("Λεπτομέρειες σφάλματος:", error);
             }
