@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignAI Web - Olga's Project</title>
+    <title>SignAI Web - Olga's Final</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -22,10 +22,10 @@
 </head>
 <body>
 
-    <h1>🚀 SignAI: Κανονική Λειτουργία</h1>
-    <p>Κάνε τη χειρονομία σταθερά. Ο ήχος είναι <b>Γυναίκα</b> (πάτα 1 για Άντρα αν θες).</p>
+    <h1>🚀 SignAI: Olga's System</h1>
+    <p>Κάνε τη χειρονομία. Πάτα <b>2</b> για Γυναίκα και <b>Κάνε Κλικ</b> στην κάμερα!</p>
 
-    <div class="container">
+    <div class="container" onclick="unlockAudio()">
         <video id="video_element" width="640" height="480" autoplay></video>
         <canvas id="canvas_element" width="640" height="480"></canvas>
         <div id="ui-layer">
@@ -44,7 +44,13 @@
         const liveRadar = document.getElementById('live-radar');
 
         let preferredGender = 'female'; 
-        let synth = window.speechSynthesis;
+        let audioUnlocked = false;
+
+        function unlockAudio() {
+            audioUnlocked = true;
+            statusBox.innerText = "🔊 Ήχος Ενεργός";
+            setTimeout(() => { statusBox.innerText = "✅ AI ΕΤΟΙΜΟ"; }, 2000);
+        }
 
         window.addEventListener('keydown', (e) => {
             if (e.key === '1') preferredGender = 'male';
@@ -52,24 +58,27 @@
         });
 
         function speakGreek(text) {
-            synth.cancel();
+            if (!audioUnlocked) return;
+            window.speechSynthesis.cancel();
             let utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'el-GR';
-            let voices = synth.getVoices().filter(v => v.lang.includes('el'));
             
-            if (voices.length > 0) {
-                let selectedVoice = voices[0];
-                for (let v of voices) {
+            let voices = window.speechSynthesis.getVoices();
+            let greekVoices = voices.filter(v => v.lang.includes('el'));
+            
+            if (greekVoices.length > 0) {
+                let selectedVoice = greekVoices[0];
+                for (let v of greekVoices) {
                     let name = v.name.toLowerCase();
                     if (preferredGender === 'male' && name.includes('stefanos')) selectedVoice = v;
-                    if (preferredGender === 'female' && (name.includes('google') || name.includes('athina') || name.includes('female'))) {
+                    if (preferredGender === 'female' && (name.includes('google') || name.includes('athina') || name.includes('female') || name.includes('zira'))) {
                         selectedVoice = v;
                         break;
                     }
                 }
                 utterance.voice = selectedVoice;
             }
-            synth.speak(utterance);
+            window.speechSynthesis.speak(utterance);
         }
 
         let model, labels = [], sequence = [];
@@ -83,12 +92,12 @@
                 model = await tf.loadLayersModel('./model.json');
                 statusBox.innerText = "✅ AI ΕΤΟΙΜΟ";
                 statusBox.style.background = "#00FF00";
-            } catch (e) { statusBox.innerText = "❌ ΣΦΑΛΜΑ"; }
+            } catch (e) { statusBox.innerText = "❌ ΣΦΑΛΜΑ ΑΡΧΕΙΩΝ"; }
         }
         init();
 
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
         hands.onResults((results) => {
             canvasCtx.save();
@@ -117,13 +126,14 @@
                         
                         liveRadar.innerText = `Ανάλυση: ${word} (${Math.round(conf*100)}%)`;
 
-                        if (conf > 0.70 && (now - lastSpokenTime) > 3) { 
+                        // ΟΡΙΟ ΣΤΟ 60% ΟΠΩΣ ΖΗΤΗΣΕΣ
+                        if (conf > 0.60 && (now - lastSpokenTime) > 3) { 
                             speakGreek(word);
                             lastSpokenTime = now;
                             finalWordBox.innerText = word;
                             finalWordBox.style.display = 'block';
                             setTimeout(() => finalWordBox.style.display = 'none', 2000);
-                            sequence = []; // Καθαρισμός για την επόμενη κίνηση
+                            sequence = sequence.slice(15); 
                         }
                         tf.dispose([input, prediction]);
                     }
